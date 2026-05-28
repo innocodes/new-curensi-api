@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api import auth, payments, transactions, corridors, webhooks
+from app.api import auth, payments, transactions, corridors, webhooks, waitlist
 
 app = FastAPI(
     title="Curensi API",
@@ -24,6 +24,7 @@ app.include_router(payments.router,     prefix="/api/v1")
 app.include_router(transactions.router, prefix="/api/v1")
 app.include_router(corridors.router,    prefix="/api/v1")
 app.include_router(webhooks.router,     prefix="/api/v1")
+app.include_router(waitlist.router,     prefix="/api/v1")
 
 
 @app.get("/health")
