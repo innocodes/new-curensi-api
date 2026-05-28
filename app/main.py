@@ -5,7 +5,7 @@ from app.api import auth, payments, transactions, corridors, webhooks
 
 app = FastAPI(
     title="Curensi API",
-    description="Cross-border merchant payment platform — multi-corridor",
+    description="Cross-border merchant payment platform — multi-corridor system",
     version="1.0.0",
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
