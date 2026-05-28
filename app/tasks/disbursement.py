@@ -40,7 +40,7 @@ async def _disburse(task, transaction_id: str):
                 amount=tx.target_amount,
                 currency=tx.target_currency,
                 transaction_ref=str(tx.id),
-                metadata={"user_id": str(tx.user_id), **(tx.metadata or {})},
+                metadata={"user_id": str(tx.user_id), **(tx.extra or {})},
             )
 
             tx.disbursement_reference = result["disbursement_reference"]

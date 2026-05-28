@@ -75,7 +75,7 @@ async def initiate_transaction(
         disbursement_target_type=target_type,
         disbursement_target_data=target_data,
         status="pending",
-        metadata=metadata,
+        extra=metadata,
     )
     db.add(tx)
     await db.flush()  # get tx.id without committing

@@ -79,7 +79,8 @@ class Transaction(Base):
     refund_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     # Flexible extra data (merchant name, note, etc.)
-    metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Named 'extra' because 'metadata' is reserved by SQLAlchemy's DeclarativeBase.
+    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True

@@ -59,7 +59,7 @@ async def get_transaction(
 def _serialize_list(tx: Transaction) -> dict:
     return {
         "id": str(tx.id),
-        "merchant_name": (tx.metadata or {}).get("merchant_name"),
+        "merchant_name": (tx.extra or {}).get("merchant_name"),
         "target_amount": float(tx.target_amount),
         "target_currency": tx.target_currency,
         "source_amount": float(tx.source_amount),
@@ -87,5 +87,5 @@ def _serialize_detail(tx: Transaction) -> dict:
         "refund_status": tx.refund_status,
         "refund_reference": tx.refund_reference,
         "completed_at": tx.completed_at.isoformat() if tx.completed_at else None,
-        "note": (tx.metadata or {}).get("note"),
+        "note": (tx.extra or {}).get("note"),
     }

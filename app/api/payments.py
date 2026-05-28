@@ -100,7 +100,7 @@ async def payment_status(
         "source_currency": tx.source_currency,
         "platform_fee": float(tx.platform_fee),
         "fx_rate": float(tx.fx_rate),
-        "merchant_name": (tx.metadata or {}).get("merchant_name"),
+        "merchant_name": (tx.extra or {}).get("merchant_name"),
         "alipay_ref": tx.alipay_ref,
         "disbursement_reference": tx.disbursement_reference,
         "failure_reason": tx.failure_reason,
