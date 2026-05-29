@@ -8,7 +8,10 @@ services:
       - .:/app
     command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -22,7 +25,10 @@ services:
       - .:/app
     command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   beat:
     build: .
@@ -47,3 +53,22 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --save "" --appendonly no
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: curensi
+      POSTGRES_PASSWORD: curensi
+      POSTGRES_DB: curensi
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U curensi -d curensi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

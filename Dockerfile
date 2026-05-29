@@ -18,6 +18,7 @@ USER appuser
 
 EXPOSE 8000
 
-# Shell form so Railway's $PORT env var is expanded at runtime.
-# Falls back to 8000 for local docker compose.
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# exec replaces sh with uvicorn so uvicorn is PID 1 and receives signals
+# (SIGTERM from Railway) directly — prevents silent SIGKILL on shutdown.
+# ${PORT:-8000} still expands correctly via the shell before exec fires.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

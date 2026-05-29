@@ -9,8 +9,12 @@ from app.core.providers.lianlian import LianLianProvider
 from app.models.transaction import Transaction
 from app.models.audit_log import AuditLog
 from app.models.user import User
-from app.tasks.disbursement import disburse_payment
 from app.services.notification_service import send_push
+
+# disburse_payment is imported lazily inside the handler (not at module level)
+# to prevent Celery from initialising its broker connection in the web process
+# at startup, which conflicts with uvicorn's asyncio event loop and causes a
+# silent crash immediately after the health check passes.
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -21,7 +25,6 @@ async def flutterwave_webhook(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify signature
     signature = request.headers.get("verif-hash", "")
     if not FlutterwaveProvider.verify_webhook(b"", signature):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
@@ -36,7 +39,6 @@ async def flutterwave_webhook(
     if not tx_ref:
         return {"status": "ignored"}
 
-    # Look up transaction by collection reference
     result = await db.execute(
         select(Transaction).where(Transaction.collection_reference == tx_ref)
     )
@@ -44,11 +46,9 @@ async def flutterwave_webhook(
     if not tx:
         return {"status": "not_found"}
 
-    # Idempotency — skip if already confirmed
     if tx.collection_status == "confirmed":
         return {"status": "already_processed"}
 
-    # Mark collection confirmed
     tx.collection_status = "confirmed"
     tx.status = "collection_confirmed"
 
@@ -60,7 +60,6 @@ async def flutterwave_webhook(
     ))
     await db.commit()
 
-    # Notify user that payment received — disbursing now
     user_result = await db.execute(select(User).where(User.id == tx.user_id))
     user = user_result.scalar_one_or_none()
     if user and user.fcm_token:
@@ -71,7 +70,9 @@ async def flutterwave_webhook(
             data={"transaction_id": str(tx.id), "type": "collection_confirmed"},
         )
 
-    # Queue disbursement via Celery
+    # Lazy import — Celery is only loaded when a real webhook arrives,
+    # never at web process startup.
+    from app.tasks.disbursement import disburse_payment  # noqa: PLC0415
     background_tasks.add_task(disburse_payment.delay, str(tx.id))
 
     return {"status": "accepted"}
@@ -82,7 +83,6 @@ async def lianlian_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify signature
     body = await request.body()
     signature = request.headers.get("X-LianLian-Signature", "")
     if not LianLianProvider.verify_webhook(body, signature):
@@ -125,7 +125,6 @@ async def lianlian_webhook(
     elif ll_status == "FAILED":
         tx.disbursement_status = "failed"
         tx.failure_reason = payload.get("fail_reason")
-        # Refund will be triggered by the task retry exhaustion flow
 
     await db.commit()
     return {"status": "accepted"}
