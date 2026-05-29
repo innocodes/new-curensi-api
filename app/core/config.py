@@ -55,17 +55,26 @@ class Settings(BaseSettings):
         """
         Normalizes DATABASE_URL for asyncpg + Neon SSL.
         Always use this property in the app — never DATABASE_URL directly.
+
+        Key difference from psycopg2:
+          asyncpg does NOT accept 'sslmode' or 'channel_binding' as query params.
+          It uses 'ssl=require' instead. Strip the libpq params and add the
+          asyncpg-compatible one.
         """
+        import re
         url = self.DATABASE_URL
 
-        # Normalize driver prefix for asyncpg
+        # Normalize driver prefix
         url = url.replace("postgres://", "postgresql+asyncpg://")
         url = url.replace("postgresql://", "postgresql+asyncpg://")
 
-        # Neon requires SSL — append if missing
-        if "neon.tech" in url and "sslmode" not in url and "ssl=" not in url:
-            separator = "&" if "?" in url else "?"
-            url += f"{separator}ssl=require"
+        # Strip libpq-only params that asyncpg rejects with TypeError
+        url = re.sub(r"[&?]sslmode=[^&]*", "", url)
+        url = re.sub(r"[&?]channel_binding=[^&]*", "", url)
+
+        # Add asyncpg-compatible SSL param
+        separator = "&" if "?" in url else "?"
+        url += f"{separator}ssl=require"
 
         return url
 
