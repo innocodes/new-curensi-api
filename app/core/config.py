@@ -11,11 +11,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Neon DB
-    DATABASE_URL: str        # asyncpg — used by the app
-    DATABASE_URL_SYNC: str   # psycopg2 — used by Alembic migrations only
+    DATABASE_URL: str
+    DATABASE_URL_SYNC: str
 
     # Redis / Celery
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # ✅ No localhost default — forces explicit config in all environments
+    REDIS_URL: str
 
     # Flutterwave
     FLUTTERWAVE_SECRET_KEY: str = ""
@@ -35,7 +36,7 @@ class Settings(BaseSettings):
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
-    # Future providers — optional
+    # Future providers
     MPESA_CONSUMER_KEY: str = ""
     MPESA_CONSUMER_SECRET: str = ""
     AIRWALLEX_CLIENT_ID: str = ""
@@ -48,6 +49,39 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
+
+    @property
+    def async_database_url(self) -> str:
+        """
+        Normalizes DATABASE_URL for asyncpg + Neon SSL.
+        Always use this property in the app — never DATABASE_URL directly.
+        """
+        url = self.DATABASE_URL
+
+        # Normalize driver prefix for asyncpg
+        url = url.replace("postgres://", "postgresql+asyncpg://")
+        url = url.replace("postgresql://", "postgresql+asyncpg://")
+
+        # Neon requires SSL — append if missing
+        if "neon.tech" in url and "sslmode" not in url and "ssl=" not in url:
+            separator = "&" if "?" in url else "?"
+            url += f"{separator}ssl=require"
+
+        return url
+
+    @property
+    def sync_database_url(self) -> str:
+        """
+        Normalizes DATABASE_URL_SYNC for psycopg2 (Alembic only).
+        Always use this in alembic/env.py — never DATABASE_URL_SYNC directly.
+        """
+        url = self.DATABASE_URL_SYNC
+
+        # Normalize driver prefix for psycopg2
+        url = url.replace("postgres://", "postgresql+psycopg2://")
+        url = url.replace("postgresql://", "postgresql+psycopg2://")
+
+        return url
 
     @property
     def celery_broker_url(self) -> str:
