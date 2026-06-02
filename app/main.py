@@ -136,4 +136,7 @@ async def health():
         "status": "ok",
         "aggregator": settings.ENABLE_AGGREGATOR,
         "payments": settings.ENABLE_PAYMENTS,
+        "whatsapp_webhooks": settings.ENABLE_WHATSAPP_BOT,
+        "subscriptions": settings.ENABLE_SUBSCRIPTIONS,
+        "payment_webhooks": settings.ENABLE_PAYMENTS,
     }
