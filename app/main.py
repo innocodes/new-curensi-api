@@ -8,16 +8,32 @@ from sqlalchemy import text
 import redis.asyncio as aioredis
 from app.core.config import settings
 from app.core.database import engine
-from app.api import auth, payments, transactions, corridors, webhooks, waitlist
+
+# ── Always-active routers ────────────────────────────────────────────
+from app.api import auth, waitlist, users
+
+# ── Aggregator routers (conditional) ────────────────────────────────
+if settings.ENABLE_AGGREGATOR:
+    from app.api import ingest, insights, budgets, accounts, financial_transactions, export
+
+if settings.ENABLE_WHATSAPP_BOT:
+    from app.api import whatsapp  # Phase 2
+
+if settings.ENABLE_SUBSCRIPTIONS:
+    from app.api import subscriptions  # Phase 2
+
+# ── Payment platform routers (preserved, flagged off) ────────────────
+if settings.ENABLE_PAYMENTS:
+    from app.api import payments, corridors
+
+if settings.ENABLE_PAYMENT_WEBHOOKS:
+    from app.api import payment_webhooks
 
 logger = logging.getLogger(__name__)
 
 
 async def _check_db(retries: int = 5, delay: float = 2.0) -> None:
-    """
-    Retry DB check to handle Neon cold-start latency.
-    Logs failure but never raises — app stays up regardless.
-    """
+    """Retry DB check to handle Neon cold-start. Logs failure, never raises."""
     for attempt in range(1, retries + 1):
         try:
             async with engine.connect() as conn:
@@ -25,61 +41,54 @@ async def _check_db(retries: int = 5, delay: float = 2.0) -> None:
             logger.info("✅ Database connection successful")
             return
         except Exception as e:
-            logger.warning(
-                f"⚠️ DB check attempt {attempt}/{retries} failed: {e}"
-            )
+            logger.warning(f"⚠️  DB check attempt {attempt}/{retries} failed: {e}")
             if attempt < retries:
                 await asyncio.sleep(delay)
-
-    # All retries exhausted — log but do NOT raise
-    # App stays up; individual requests will surface real DB errors
-    logger.error(
-        "❌ Database connection failed after all retries — "
-        "app will continue but DB requests may fail"
-    )
+    logger.error("❌ DB connection failed after retries — requests may fail")
 
 
 async def _check_redis() -> None:
-    """
-    Redis check is non-fatal — app works without Redis for non-cached paths.
-    """
+    """Redis check is non-fatal — caching degrades gracefully without it."""
     try:
-        client = aioredis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True      # encoding param removed — deprecated in redis-py 5.x
-        )
+        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         await client.ping()
         await client.aclose()
         logger.info("✅ Redis connection successful")
     except Exception as e:
-        # Non-fatal — log and continue
-        logger.error(f"❌ Redis connection failed: {e} — caching and tasks may be affected")
+        logger.error(f"❌ Redis connection failed: {e}")
 
 
-# ✅ lifespan replaces deprecated @app.on_event
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # ── Startup ──────────────────────────────────────────────────────
     logger.info(f"PORT: {os.environ.get('PORT', 'NOT SET')}")
     logger.info(f"Environment: {settings.APP_ENV}")
-    logger.info(f"DB: {settings.async_database_url[:40]}...")
-    logger.info(f"Redis: {settings.REDIS_URL[:30]}...")
+    logger.info(
+        f"Feature flags — "
+        f"AGGREGATOR={settings.ENABLE_AGGREGATOR} | "
+        f"AI_INSIGHTS={settings.ENABLE_AI_INSIGHTS} | "
+        f"PAYMENTS={settings.ENABLE_PAYMENTS} | "
+        f"WHATSAPP={settings.ENABLE_WHATSAPP_BOT} | "
+        f"SUBSCRIPTIONS={settings.ENABLE_SUBSCRIPTIONS}"
+    )
 
     await _check_db()
     await _check_redis()
 
-    yield  # App runs here
+    yield
 
-    # Shutdown
+    # ── Shutdown ─────────────────────────────────────────────────────
+    from app.services.fx_service import close_redis
+    await close_redis()
     await engine.dispose()
-    logger.info("✅ Engine disposed cleanly")
+    logger.info("✅ Shutdown complete")
 
 
 app = FastAPI(
-    title="Curensi API",
-    description="Cross-border merchant payment platform — multi-corridor system",
-    version="1.0.0",
-    lifespan=lifespan,                  # ✅ replaces deprecated on_event
+    title="Curensi AI API",
+    description="Financial aggregator + cross-border payment platform",
+    version="2.0.0",
+    lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url="/redoc" if not settings.is_production else None,
 )
@@ -92,14 +101,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router,         prefix="/api/v1")
-app.include_router(payments.router,     prefix="/api/v1")
-app.include_router(transactions.router, prefix="/api/v1")
-app.include_router(corridors.router,    prefix="/api/v1")
-app.include_router(webhooks.router,     prefix="/api/v1")
-app.include_router(waitlist.router,     prefix="/api/v1")
+# ── Always register ───────────────────────────────────────────────────
+app.include_router(auth.router,     prefix="/api/v1", tags=["Auth"])
+app.include_router(waitlist.router, prefix="/api/v1", tags=["Waitlist"])
+app.include_router(users.router,    prefix="/api/v1", tags=["Users"])
+
+# ── Aggregator ────────────────────────────────────────────────────────
+if settings.ENABLE_AGGREGATOR:
+    app.include_router(ingest.router,                 prefix="/api/v1", tags=["Ingest"])
+    app.include_router(insights.router,               prefix="/api/v1", tags=["Insights"])
+    app.include_router(budgets.router,                prefix="/api/v1", tags=["Budgets"])
+    app.include_router(accounts.router,               prefix="/api/v1", tags=["Accounts"])
+    app.include_router(financial_transactions.router, prefix="/api/v1", tags=["Transactions"])
+    app.include_router(export.router,                 prefix="/api/v1", tags=["Export"])
+
+if settings.ENABLE_WHATSAPP_BOT:
+    app.include_router(whatsapp.router,      prefix="/api/v1", tags=["WhatsApp"])
+
+if settings.ENABLE_SUBSCRIPTIONS:
+    app.include_router(subscriptions.router, prefix="/api/v1", tags=["Subscriptions"])
+
+# ── Payment platform (preserved, flagged off) ─────────────────────────
+if settings.ENABLE_PAYMENTS:
+    app.include_router(payments.router,  prefix="/api/v1", tags=["Payments"])
+    app.include_router(corridors.router, prefix="/api/v1", tags=["Corridors"])
+
+if settings.ENABLE_PAYMENT_WEBHOOKS:
+    app.include_router(payment_webhooks.router, prefix="/api/v1", tags=["Payment Webhooks"])
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "aggregator": settings.ENABLE_AGGREGATOR,
+        "payments": settings.ENABLE_PAYMENTS,
+    }

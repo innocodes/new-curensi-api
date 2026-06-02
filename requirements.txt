@@ -5,7 +5,7 @@ gunicorn==23.0.0
 # Database
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
-psycopg2-binary==2.9.10
+psycopg2-binary>=2.9.6
 alembic==1.14.0
 
 # Validation & config
@@ -20,7 +20,7 @@ passlib[bcrypt]==1.7.4
 # HTTP client (provider calls)
 httpx==0.28.1
 
-# File uploads (KYC)
+# File uploads
 python-multipart==0.0.20
 
 # Task queue
@@ -35,3 +35,22 @@ firebase-admin==6.6.0
 
 # Resilience
 tenacity==9.0.0
+
+# ── Aggregator additions ────────────────────────────────────────────
+# AI providers
+anthropic>=0.40.0
+openai>=1.50.0
+
+# File storage (Cloudflare R2 via S3 API)
+boto3>=1.35.0
+
+# PDF text extraction
+pypdf>=4.0.0
+
+# Export formats
+openpyxl>=3.1.0
+reportlab>=4.0.0
+pandas>=2.0.0
+
+# Utility
+rapidfuzz>=3.0.0

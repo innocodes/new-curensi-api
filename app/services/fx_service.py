@@ -49,6 +49,14 @@ def calculate_fee(source_amount: Decimal, fee_percentage: Decimal, fee_flat: Dec
     return fee
 
 
+async def close_redis() -> None:
+    """Close the shared Redis client on shutdown."""
+    global _redis
+    if _redis is not None:
+        await _redis.aclose()
+        _redis = None
+
+
 def get_rate_response(rate: Decimal, fee_pct: Decimal) -> dict:
     return {
         "cny_per_ngn": rate,

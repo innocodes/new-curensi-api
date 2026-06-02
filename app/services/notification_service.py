@@ -1,8 +1,10 @@
 import json
+import logging
 import firebase_admin
 from firebase_admin import credentials, messaging
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 _app_initialized = False
 
 
@@ -37,4 +39,30 @@ def send_push(fcm_token: str, title: str, body: str, data: dict | None = None) -
         messaging.send(message)
         return True
     except Exception:
+        return False
+
+
+async def send_push_to_user(
+    user_id: str,
+    title: str,
+    body: str,
+    data: dict | None = None,
+    db=None,
+) -> bool:
+    """
+    Look up the user's FCM token from the DB and send a push notification.
+    Used by Celery tasks that have a DB session but not the token directly.
+    """
+    if db is None:
+        return False
+    try:
+        from sqlalchemy import select
+        from app.models.user import User
+        result = await db.execute(select(User.fcm_token).where(User.id == user_id))
+        fcm_token = result.scalar_one_or_none()
+        if not fcm_token:
+            return False
+        return send_push(fcm_token, title, body, data)
+    except Exception as e:
+        logger.warning(f"send_push_to_user failed for {user_id}: {e}")
         return False
